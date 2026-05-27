@@ -1,0 +1,45 @@
+/*
+ * app/globals.css
+ * Custom CSS global + Tailwind directives.
+ */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Override default font dengan system font stack */
+body {
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    Oxygen,
+    Ubuntu,
+    "Helvetica Neue",
+    sans-serif;
+}
+
+/* Fix Leaflet z-index (default 1000 bisa nutupin elemen UI) */
+.leaflet-container {
+  z-index: 0;
+}
+
+/* Custom scrollbar styling - subtle dan modern */
+@layer utilities {
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 3px;
+  }
+}
