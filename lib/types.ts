@@ -75,10 +75,14 @@ export interface ClassificationResult extends ClassificationStats {
   crs: string;                   // "EPSG:4326"
   bounds: [number, number, number, number]; // [minLon, minLat, maxLon, maxLat]
   files: {
-    orthophoto: string;
-    classification: string;
-    visualization: string;
+    orthophoto: string;                      // GeoTIFF resolusi penuh — untuk download QGIS
+    classification: string;                  // GeoTIFF klasifikasi — untuk download QGIS
+    orthophoto_web_png: string;              // PNG RGBA orthophoto — untuk Leaflet ImageOverlay
+    classification_overlay_png: string;      // PNG RGBA overlay kuning/hijau — untuk Leaflet ImageOverlay
+    visualization: string;                   // PNG visualisasi lengkap (dengan banner & legend)
   };
+  /** Bounds dalam WGS84 [minLon, minLat, maxLon, maxLat] — selalu ada di hasil baru. */
+  bounds_wgs84?: [number, number, number, number];
   duration_seconds: number;
 }
 

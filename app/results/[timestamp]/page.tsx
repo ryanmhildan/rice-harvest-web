@@ -64,7 +64,6 @@ export default function ResultDetailPage({ params }: PageProps) {
         const r = await fetch(url);
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const data: ClassificationResult = await r.json();
-        console.log("data check",data)
         setResult({ ...data, success: true });
       } catch (err) {
         const msg =
@@ -108,25 +107,31 @@ export default function ResultDetailPage({ params }: PageProps) {
   }
 
   const extractName = (p: string) => p.split(/[/\\]/).pop() || "";
-  const orthoUrl = api.fileUrl("orthophoto", extractName(result.files.orthophoto));
+
+  // URL untuk tombol download (GeoTIFF resolusi penuh)
+  const orthoUrl = api.fileUrl("orthophoto",     extractName(result.files.orthophoto));
   const classUrl = api.fileUrl("classification", extractName(result.files.classification));
-  const vizUrl  = api.fileUrl("visualization",  extractName(result.files.visualization));
+
+  // URL PNG untuk Leaflet ImageOverlay
+  const orthoPngUrl  = api.fileUrl("orthophoto_web",     extractName(result.files.orthophoto_web_png));
+  const classPngUrl  = api.fileUrl("classification_web", extractName(result.files.classification_overlay_png));
+
+  // PNG visualisasi lengkap (untuk thumbnail kiri-bawah & lightbox)
+  const vizUrl = api.fileUrl("visualization", extractName(result.files.visualization));
+
+  // Bounds WGS84 — pakai bounds_wgs84 kalau ada (hasil baru), fallback ke bounds lama
+  const mapBounds = (result.bounds_wgs84 ?? result.bounds) as [number, number, number, number];
+
   const isReady = result.verdict === "SIAP PANEN";
-
-
-   console.log("data ",orthoUrl, classUrl, vizUrl)
-   console.log("data vizz ",result)
   return (
     <>
       {/* Fullscreen map — fixed, menempel ke tepi viewport, top-16 = NavBar h-16 */}
       <div className="fixed inset-x-0 bottom-0 top-16 z-40 overflow-hidden">
         {/* Peta mengisi seluruh area */}
         <MapView
-          bounds={result.bounds}
-          orthophotoUrl={orthoUrl}
-          classificationUrl={classUrl}
-          fallbackImageUrl={vizUrl}
-          height="h-full"
+          bounds={mapBounds}
+          orthophotoPngUrl={orthoPngUrl}
+          classificationPngUrl={classPngUrl}
           containerClassName="h-full w-full overflow-hidden"
         />
 

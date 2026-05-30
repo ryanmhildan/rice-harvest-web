@@ -1,7 +1,14 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(python -c \"from services.classification import export_orthophoto_web_png, export_classification_overlay_png; print\\('OK — fungsi baru berhasil diimport'\\)\")",
+      "Bash(npm uninstall *)",
+      "Bash(Remove-Item \"c:\\\\Users\\\\bomag\\\\Documents\\\\SKRIPSI\\\\rice-harvest-web\\\\components\\\\raster-layer.tsx\" -Force)",
+      "Bash(Remove-Item \"c:\\\\Users\\\\bomag\\\\Documents\\\\SKRIPSI\\\\rice-harvest-web\\\\types\\\\georaster.d.ts\" -Force)",
+      "Bash(Write-Output \"Deleted\")",
+      "Bash(npx next *)",
+      "Bash(npm install *)"
     ]
   }
 }

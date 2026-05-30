@@ -1,195 +1,247 @@
+"use client";
+
 /**
  * components/map-view.tsx
  * ================================================================
- * Wrapper untuk Leaflet map dengan:
- *   1. Basemap OpenStreetMap
- *   2. Layer visualisasi PNG overlay (dari backend, langsung)
- *   3. Auto-zoom ke bounds saat mount
- *   4. Toggle visibility + opacity slider
+ * Peta Leaflet interaktif dengan dua layer PNG overlay terpisah:
+ *   1. Orthophoto  — foto udara sawah (RGBA, NoData transparan)
+ *   2. Klasifikasi — bercak kuning/hijau semi-transparan di atasnya
  *
- * KENAPA PNG bukan GeoTIFF?
- *   - georaster/geotiff.js melempar error internal ("Offset is outside
- *     the bounds of the DataView") di microtask yang tidak bisa
- *     di-catch dengan try/await biasa → loading spinner tidak pernah
- *     selesai.
- *   - Penyebab root: NodeODM output GeoTIFF menggunakan proyeksi UTM
- *     + tiled/COG structure dengan absolute byte-offsets yang besar,
- *     tidak kompatibel dengan georaster-layer-for-leaflet.
- *   - PNG visualization (300 DPI, dari backend) sudah cukup untuk
- *     menampilkan hasil klasifikasi di peta. L.imageOverlay hanya
- *     butuh URL + bounds, tidak ada parsing binary.
- *   - GeoTIFF masih tersedia untuk download (tombol di results page).
+ * KENAPA ZOOM CONTROL DIPINDAH?
+ *   Default Leaflet zoom buttons (+/-) ada di kiri-atas. Tapi di
+ *   halaman results, kiri-atas sudah diisi floating buttons (Kembali,
+ *   Verdict, Download) dengan z-[1001] yang menutupi tombol zoom.
+ *   Solusi: zoomControl={false} + tombol +/- custom di panel ini,
+ *   dikendalikan lewat `mapRef`.
+ *
+ * Layer controls (toggle + opacity slider) dan tombol zoom dirender
+ * DI LUAR MapContainer agar tidak mengganggu event Leaflet (scroll,
+ * drag, double-click).
  * ================================================================
  */
-"use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { MapContainer, TileLayer, useMap } from "react-leaflet";
+import { useMemo, useRef, useState } from "react";
+import { MapContainer, TileLayer, ImageOverlay } from "react-leaflet";
 import L from "leaflet";
-import "leaflet/dist/leaflet.css"; // side-effect: inject Leaflet CSS
-import proj4 from "proj4";
+import "leaflet/dist/leaflet.css";
 
+// ============================================================================
+// Props
+// ============================================================================
 interface MapViewProps {
-  /** Bounds: [minLon, minLat, maxLon, maxLat] dari backend. */
+  /** Bounds WGS84: [minLon, minLat, maxLon, maxLat] */
   bounds: [number, number, number, number];
-  /** Diterima tapi tidak dipakai di peta — hanya agar caller tidak perlu berubah. */
-  orthophotoUrl: string;
-  /** Sama — diterima tapi tidak di-fetch di peta. Gunakan tombol download untuk GeoTIFF. */
-  classificationUrl: string;
-  /** URL PNG visualisasi dari backend — dipakai sebagai overlay di peta. */
-  fallbackImageUrl?: string;
-  /** Tinggi map (Tailwind class). Default "h-[600px]". */
+  /** URL PNG RGBA orthophoto — dari /api/files/orthophoto_web/... */
+  orthophotoPngUrl?: string;
+  /** URL PNG RGBA overlay klasifikasi — dari /api/files/classification_web/... */
+  classificationPngUrl?: string;
+  /** Tinggi map dalam Tailwind class. Default "h-[600px]". */
   height?: string;
   /**
-   * Override class untuk outer div container. Jika disediakan, `height` diabaikan
-   * dan default border/rounded tidak diterapkan. Berguna untuk mode fullscreen.
+   * Override class untuk div terluar. Kalau ada, `height` diabaikan.
+   * Contoh fullscreen: containerClassName="h-full w-full overflow-hidden"
    */
   containerClassName?: string;
 }
 
+// ============================================================================
+// Komponen utama
+// ============================================================================
 export function MapView({
   bounds,
-  fallbackImageUrl,
+  orthophotoPngUrl,
+  classificationPngUrl,
   height = "h-[600px]",
   containerClassName,
-  classificationUrl,
-  orthophotoUrl,
 }: MapViewProps) {
-  // Backend: [minLon, minLat, maxLon, maxLat]
-  // Leaflet: [[minLat, minLon], [maxLat, maxLon]]
-  // useMemo agar referensi stabil, tidak trigger re-render anak berulang
+  /**
+   * mapRef: referensi ke instance Leaflet map.
+   * Dipakai tombol +/- yang ada di luar MapContainer untuk zoom
+   * tanpa harus masuk ke dalam context Leaflet.
+   */
+  const mapRef = useRef<L.Map | null>(null);
 
-  // const leafletBounds = useMemo<L.LatLngBoundsLiteral>(
-  //   () => [
-  //     [bounds[1], bounds[0]],
-  //     [bounds[3], bounds[2]],
-  //   ],
-  //   // eslint-disable-next-line react-hooks/exhaustive-deps
-  //   [bounds[0], bounds[1], bounds[2], bounds[3]]
-  // );
+  // State layer controls — ditaruh di sini agar bisa di-pass ke ImageOverlay
+  const [showOrtho, setShowOrtho]       = useState(true);
+  const [showClass, setShowClass]       = useState(true);
+  const [classOpacity, setClassOpacity] = useState(0.65);
 
-const leafletBounds = useMemo<L.LatLngBoundsLiteral>(() => {
-  const [minX, minY, maxX, maxY] = bounds;
+  /**
+   * useMemo: stabilkan referensi bounds agar ImageOverlay tidak
+   * re-render terus setiap parent render.
+   *
+   * Leaflet: [[minLat, minLon], [maxLat, maxLon]]
+   * Backend: [minLon, minLat, maxLon, maxLat]
+   */
+  const leafletBounds = useMemo<L.LatLngBoundsLiteral>(
+    () => [
+      [bounds[1], bounds[0]], // south-west
+      [bounds[3], bounds[2]], // north-east
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [bounds[0], bounds[1], bounds[2], bounds[3]],
+  );
 
-  const min = proj4("EPSG:32748", "EPSG:4326", [minX, minY]);
-  const max = proj4("EPSG:32748", "EPSG:4326", [maxX, maxY]);
-
-  console.log("converted min", min);
-  console.log("converted max", max);
-
-  return [
-    [min[1], min[0]],
-    [max[1], max[0]],
-  ];
-}, [bounds]);
- 
-   console.log("data in component bounds  ",bounds)
-   console.log("data in component fallbackImageUrl  ", fallbackImageUrl)
-   console.log("data in component classificationUrl  ", classificationUrl)
-   console.log("data in component orthophotoUrl  ", orthophotoUrl)
-
+  const hasLayers = !!(orthophotoPngUrl || classificationPngUrl);
 
   return (
-    <div className={containerClassName ?? `${height} w-full overflow-hidden rounded-lg border border-slate-200`}>
-      {/* bounds prop → MapContainer set initial view langsung ke area sawah,
-          tanpa perlu useEffect tambahan. boundsOptions padding agar tidak kepotong. */}
+    <div
+      className={
+        containerClassName ??
+        `${height} w-full overflow-hidden rounded-lg border border-slate-200`
+      }
+      style={{ position: "relative" }}
+    >
+      {/*
+       * MapContainer: wrapper Leaflet.
+       * - zoomControl={false}: tombol +/- default dihapus karena akan
+       *   tertutup floating UI. Kita ganti dengan tombol custom di panel.
+       * - bounds + boundsOptions: auto-zoom ke sawah saat pertama load.
+       * - scrollWheelZoom={true}: zoom dengan scroll mouse tetap aktif.
+       * - ref={mapRef}: referensi map untuk tombol zoom di luar.
+       */}
       <MapContainer
+        ref={mapRef}
         bounds={leafletBounds}
         boundsOptions={{ padding: [30, 30] }}
+        zoomControl={false}
         scrollWheelZoom={true}
+        doubleClickZoom={true}
+        maxZoom={22}
         style={{ height: "100%", width: "100%" }}
       >
+        {/*
+         * maxNativeZoom={19}: OSM hanya punya tile sampai zoom 19.
+         * maxZoom={22}: Leaflet boleh zoom sampai 22, tile zoom 19
+         * akan di-upscale (diperbesar) untuk level 20-22.
+         */}
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          maxNativeZoom={19}
+          maxZoom={22}
         />
 
-        {fallbackImageUrl && (
-          <PngOverlayLayer imageUrl={fallbackImageUrl} bounds={leafletBounds} />
+        {/* Layer 1 — Orthophoto PNG */}
+        {orthophotoPngUrl && (
+          <ImageOverlay
+            url={orthophotoPngUrl}
+            bounds={leafletBounds}
+            opacity={showOrtho ? 1.0 : 0}
+            zIndex={10}
+          />
+        )}
+
+        {/* Layer 2 — Overlay klasifikasi PNG */}
+        {classificationPngUrl && (
+          <ImageOverlay
+            url={classificationPngUrl}
+            bounds={leafletBounds}
+            opacity={showClass ? classOpacity : 0}
+            zIndex={20}
+          />
         )}
       </MapContainer>
-    </div> 
-  );
-}
 
+      {/*
+       * Panel kontrol — DI LUAR MapContainer agar tidak ganggu event peta.
+       * absolute kanan-bawah, z-[1000].
+       * Berisi: tombol zoom (+/-), toggle layer, slider opacity.
+       */}
+      <div className="absolute bottom-3 right-3 z-[1000] min-w-[160px] rounded-md bg-white/95 p-3 text-xs shadow-md ring-1 ring-slate-200">
 
-/**
- * Tampilkan PNG visualization sebagai overlay di atas OSM basemap.
- * L.imageOverlay hanya butuh URL + bounds — tidak ada parsing binary,
- * tidak ada CORS issue (browser load via <img>, bukan fetch()).
- */
-function PngOverlayLayer({
-  imageUrl,
-  bounds,
-}: {
-  imageUrl: string;
-  bounds: L.LatLngBoundsLiteral;
-}) {
-  const map = useMap();
-  const overlayRef = useRef<L.ImageOverlay | null>(null);
-  const [visible, setVisible] = useState(true);
-  const [opacity, setOpacity] = useState(0.75);
-
-  // Tambah overlay saat mount, hapus saat unmount
-  useEffect(() => {
-    const overlay = L.imageOverlay(imageUrl, bounds, { opacity: 0.75 });
-    overlayRef.current = overlay;
-    overlay.addTo(map);
-
-    return () => {
-      map.removeLayer(overlay);
-      overlayRef.current = null;
-    };
-  }, [map, imageUrl, bounds]);
-
-  // Sync toggle
-  useEffect(() => {
-    const ol = overlayRef.current;
-    if (!ol) return;
-    if (visible) {
-      if (!map.hasLayer(ol)) ol.addTo(map);
-    } else {
-      if (map.hasLayer(ol)) map.removeLayer(ol);
-    }
-  }, [map, visible]);
-
-  // Sync opacity
-  useEffect(() => {
-    overlayRef.current?.setOpacity(opacity);
-  }, [opacity]);
-
-  return (
-    <div className="absolute bottom-3 right-3 z-[1000] rounded-md bg-white/95 p-3 text-xs shadow-md ring-1 ring-slate-200">
-      <div className="space-y-2">
-        <label className="flex items-center gap-2 font-medium text-slate-700">
-          <input
-            type="checkbox"
-            checked={visible}
-            onChange={(e) => setVisible(e.target.checked)}
-            className="h-3.5 w-3.5 accent-green-700"
-          />
-          Klasifikasi
-        </label>
-        <div className="border-t border-slate-200 pt-2">
-          <label className="block text-[10px] font-medium uppercase tracking-wide text-slate-500">
-            Opacity
-          </label>
-          <div className="mt-1 flex items-center gap-2">
-            <input
-              type="range"
-              min={0}
-              max={100}
-              step={5}
-              value={Math.round(opacity * 100)}
-              onChange={(e) => setOpacity(Number(e.target.value) / 100)}
-              disabled={!visible}
-              className="w-24 accent-green-700"
-            />
-            <span className="w-8 text-right font-mono text-slate-700">
-              {Math.round(opacity * 100)}%
-            </span>
+        {/* ── Tombol zoom ── */}
+        <div className="mb-2 flex items-center justify-between">
+          <span className="font-semibold uppercase tracking-wide text-slate-500">
+            Zoom
+          </span>
+          <div className="flex gap-1">
+            <button
+              onClick={() => mapRef.current?.zoomIn()}
+              className="flex h-6 w-6 items-center justify-center rounded bg-slate-100 text-base font-bold text-slate-700 hover:bg-slate-200 active:bg-slate-300"
+              title="Zoom in"
+            >
+              +
+            </button>
+            <button
+              onClick={() => mapRef.current?.zoomOut()}
+              className="flex h-6 w-6 items-center justify-center rounded bg-slate-100 text-base font-bold text-slate-700 hover:bg-slate-200 active:bg-slate-300"
+              title="Zoom out"
+            >
+              −
+            </button>
           </div>
         </div>
+
+        {/* ── Layer controls ── */}
+        {hasLayers && (
+          <>
+            <div className="mb-1.5 border-t border-slate-200 pt-2 font-semibold uppercase tracking-wide text-slate-500">
+              Layer
+            </div>
+
+            <div className="space-y-2">
+              {/* Toggle orthophoto */}
+              {orthophotoPngUrl && (
+                <label className="flex cursor-pointer items-center gap-2 text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={showOrtho}
+                    onChange={(e) => setShowOrtho(e.target.checked)}
+                    className="h-3.5 w-3.5 accent-blue-600"
+                  />
+                  Orthophoto
+                </label>
+              )}
+
+              {/* Toggle + slider opacity klasifikasi */}
+              {classificationPngUrl && (
+                <div className="space-y-1">
+                  <label className="flex cursor-pointer items-center gap-2 text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={showClass}
+                      onChange={(e) => setShowClass(e.target.checked)}
+                      className="h-3.5 w-3.5 accent-green-700"
+                    />
+                    Klasifikasi
+                  </label>
+
+                  {showClass && (
+                    <div className="pl-5">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          step={5}
+                          value={Math.round(classOpacity * 100)}
+                          onChange={(e) =>
+                            setClassOpacity(Number(e.target.value) / 100)
+                          }
+                          className="w-20 accent-green-700"
+                        />
+                        <span className="w-8 text-right font-mono text-slate-600">
+                          {Math.round(classOpacity * 100)}%
+                        </span>
+                      </div>
+                      <div className="mt-1.5 space-y-0.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="inline-block h-3 w-3 rounded-sm bg-[#FFEB3B] ring-1 ring-slate-300" />
+                          <span className="text-[10px] text-slate-500">Padi matang</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="inline-block h-3 w-3 rounded-sm bg-[#4CAF50] ring-1 ring-slate-300" />
+                          <span className="text-[10px] text-slate-500">Belum matang</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

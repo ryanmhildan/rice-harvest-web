@@ -23,16 +23,17 @@ import type {
 } from "./types";
 
 /**
- * Base URL backend FastAPI.
- *
- * NEXT_PUBLIC_API_URL adalah environment variable yang bisa di-set
- * di file .env.local. Default localhost:8000 saat development.
- *
- * Kenapa NEXT_PUBLIC_? Variabel yang berawalan ini akan disuntik ke
- * client-side bundle. Variabel tanpa NEXT_PUBLIC_ hanya tersedia
- * di server-side (untuk security).
+ * Base URL backend FastAPI — hanya untuk server-side (Next.js API routes).
+ * Client-side JANGAN pakai langsung karena kena CORS + IDM extension.
  */
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+/**
+ * Prefix proxy same-origin untuk browser fetch().
+ * Semua panggilan API dari browser diarahkan ke /api/backend/...
+ * Next.js server yang meneruskan ke API_BASE (server-to-server, bebas CORS/IDM).
+ */
+const PROXY_BASE = "/api/backend";
 
 /**
  * Custom error class untuk membedakan API error dari error lain.
@@ -58,7 +59,7 @@ async function request<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const url = `${API_BASE}${path}`;
+  const url = `${PROXY_BASE}${path}`;
 
   let response: Response;
   try {
@@ -158,14 +159,17 @@ export const api = {
 
   /**
    * Bangun URL untuk file output (misal PNG visualisasi).
-   * Tidak fetch sekarang — return URL string saja, biar bisa dipakai di <img src>.
+   * Pakai proxy /api/files/... agar bebas dari CORS dan IDM extension.
    */
-  fileUrl(kategori: "orthophoto" | "classification" | "visualization" | "results",
-          namaFile: string): string {
-    return `${API_BASE}/files/${kategori}/${encodeURIComponent(namaFile)}`;
+  fileUrl(
+    kategori: "orthophoto" | "classification" | "visualization" | "results"
+           | "orthophoto_web" | "classification_web",
+    namaFile: string,
+  ): string {
+    return `/api/files/${kategori}/${encodeURIComponent(namaFile)}`;
   },
 
-  /** Base URL backend, untuk keperluan lain. */
+  /** Base URL backend asli (untuk keperluan server-side). */
   get baseUrl(): string {
     return API_BASE;
   },
