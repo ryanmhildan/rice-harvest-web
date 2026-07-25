@@ -20,6 +20,8 @@ import type {
   ResultListResponse,
   NodeODMInfo,
   HealthInfo,
+  Lahan,
+  RiwayatDeteksi,
 } from "./types";
 
 /**
@@ -158,6 +160,28 @@ export const api = {
   },
 
   /**
+   * Upload GeoTIFF orthophoto + opsional PNG klasifikasi + opsional JSON statistik.
+   * Bounds diekstrak otomatis dari GeoTIFF oleh backend. Kalau classificationJson
+   * disertakan (file <stem>_result_<timestamp>.json dari rice_orthophoto_pipeline
+   * Sel 13), verdict & statistik di response disinkronkan dari sana sehingga
+   * hasilnya sama dengan hasil otomatis. Dipakai di tab "Hasil Manual" halaman upload.
+   */
+  uploadManualResult(
+    orthophotoTif: File,
+    classificationPng: File | null,
+    classificationJson: File | null,
+  ): Promise<ClassificationResult> {
+    const formData = new FormData();
+    formData.append("orthophoto_tif", orthophotoTif);
+    if (classificationPng) formData.append("classification_png", classificationPng);
+    if (classificationJson) formData.append("classification_json", classificationJson);
+    return request<ClassificationResult>("/upload-manual", {
+      method: "POST",
+      body: formData,
+    });
+  },
+
+  /**
    * Bangun URL untuk file output (misal PNG visualisasi).
    * Pakai proxy /api/files/... agar bebas dari CORS dan IDM extension.
    */
@@ -167,6 +191,21 @@ export const api = {
     namaFile: string,
   ): string {
     return `/api/files/${kategori}/${encodeURIComponent(namaFile)}`;
+  },
+
+  /** Ambil semua lahan yang terdaftar di database. */
+  fetchDaftarLahan(): Promise<Lahan[]> {
+    return request<Lahan[]>("/api/lahan");
+  },
+
+  /** Ambil histori deteksi untuk satu lahan tertentu (terbaru lebih dulu). */
+  fetchRiwayatLahan(idLahan: number): Promise<RiwayatDeteksi[]> {
+    return request<RiwayatDeteksi[]>(`/api/lahan/${idLahan}/riwayat`);
+  },
+
+  /** Ambil semua histori deteksi lintas lahan (max 100 baris terbaru). */
+  fetchSemuaRiwayat(): Promise<RiwayatDeteksi[]> {
+    return request<RiwayatDeteksi[]>("/api/riwayat");
   },
 
   /** Base URL backend asli (untuk keperluan server-side). */

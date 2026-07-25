@@ -134,3 +134,36 @@ export interface HealthInfo {
 export interface ApiError {
   detail: string;
 }
+
+/**
+ * Data lahan yang terdaftar di database.
+ * Response dari GET /api/lahan
+ */
+export interface Lahan {
+  id_lahan: number;
+  nama_lahan: string;
+  latitude: number;
+  longitude: number;
+  luas_estimasi_ha: number;
+  created_at: string;          // ISO 8601
+}
+
+/**
+ * Satu baris histori deteksi dari database.
+ * Response dari GET /api/lahan/{id}/riwayat  dan  GET /api/riwayat
+ *
+ * Catatan threshold: disimpan sebagai desimal 0.0–1.0 (mis. 0.60 = 60%).
+ * Catatan persentase_kematangan: sudah dalam bentuk persen 0–100.
+ */
+export interface RiwayatDeteksi {
+  id_deteksi: number;
+  id_lahan: number;
+  timestamp: string;                                    // YYYYMMDD_HHMMSS atau ISO 8601
+  verdict: Verdict;
+  verdict_class: 1 | 2;
+  persentase_kematangan: number;                        // 0–100
+  threshold: number;                                    // 0.0–1.0
+  confidence_margin_pp: number;                         // percentage points
+  crs: string;                                          // mis. "EPSG:4326"
+  bounds_wgs84: [number, number, number, number] | null; // [minLon,minLat,maxLon,maxLat]
+}

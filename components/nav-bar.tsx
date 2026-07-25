@@ -1,4 +1,4 @@
-/**
+﻿/**
  * components/nav-bar.tsx
  * ================================================================
  * Navigation bar atas yang muncul di semua halaman.
@@ -14,13 +14,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Sprout, Upload, History, Activity } from "lucide-react";
+import { Sprout, Upload, History, Activity, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/",        label: "Beranda",  icon: Sprout   },
   { href: "/upload",  label: "Upload",   icon: Upload   },
   { href: "/results", label: "Riwayat",  icon: History  },
+  { href: "/riwayat", label: "Lahan",    icon: MapPin   },
   { href: "/status",  label: "Status",   icon: Activity },
 ];
 

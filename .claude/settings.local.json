@@ -8,7 +8,13 @@
       "Bash(Remove-Item \"c:\\\\Users\\\\bomag\\\\Documents\\\\SKRIPSI\\\\rice-harvest-web\\\\types\\\\georaster.d.ts\" -Force)",
       "Bash(Write-Output \"Deleted\")",
       "Bash(npx next *)",
-      "Bash(npm install *)"
+      "Bash(npm install *)",
+      "Skill(run)",
+      "Skill(run:*)",
+      "Bash(npm run *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3001/riwayat)",
+      "Bash(curl -s http://localhost:3001/riwayat)",
+      "Bash(curl -s http://localhost:3001/)"
     ]
   }
 }

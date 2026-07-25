@@ -13,7 +13,7 @@
  */
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Loader2, CheckCircle2, XCircle, Clock } from "lucide-react";
@@ -35,6 +35,12 @@ export default function JobStatusPage({ params }: PageProps) {
   const [error, setError] = useState<string | null>(null);
   const [classifyResult, setClassifyResult] = useState<ClassificationResult | null>(null);
   const [classifying, setClassifying] = useState(false);
+  /**
+   * useRef: flag "sudah mulai klasifikasi" — tidak trigger re-render,
+   * sehingga tidak menyebabkan useEffect di bawah re-run dan
+   * membatalkan request yang sedang berjalan.
+   */
+  const hasClassified = useRef(false);
   const router = useRouter();
 
   // Unwrap params (Next.js 15 API change)
@@ -42,11 +48,27 @@ export default function JobStatusPage({ params }: PageProps) {
     params.then((p) => setJobId(p.jobId));
   }, [params]);
 
-  // Polling status job
+  // Polling status job — hanya bergantung pada jobId
   useEffect(() => {
     if (!jobId) return;
 
+    /**
+     * `cancelled`: flag untuk batalkan update state saat komponen unmount
+     * atau jobId berubah. Ini SATU-SATUNYA variabel yang boleh di-close
+     * oleh effect ini.
+     *
+     * BUG LAMA: dependency array berisi `classifying` dan `classifyResult`.
+     * Ketika setClassifying(true) dipanggil → React re-render → effect
+     * cleanup (cancelled=true) → effect baru. Akibatnya classifyJob()
+     * selesai tapi cancelled=true sehingga setClassifyResult() tidak
+     * pernah dipanggil → loading spinner abadi.
+     *
+     * FIX: dependency array hanya [jobId]. Flag "sudah klasifikasi"
+     * disimpan di hasClassified.current (useRef) agar tidak trigger
+     * re-render dan tidak membatalkan effect yang sedang berjalan.
+     */
     let cancelled = false;
+    hasClassified.current = false; // reset tiap kali jobId berubah
 
     async function poll() {
       try {
@@ -55,15 +77,18 @@ export default function JobStatusPage({ params }: PageProps) {
         setJob(data);
         setError(null);
 
-        // Auto-trigger klasifikasi saat selesai (sekali saja)
-        if (data.status === "completed" && !classifyResult && !classifying) {
+        // Auto-trigger klasifikasi saat selesai — dijaga hasClassified.current
+        // agar tidak dijalankan lebih dari sekali meski poll() dipanggil berulang
+        if (data.status === "completed" && !hasClassified.current) {
+          hasClassified.current = true; // set SEBELUM await agar poll berikutnya skip
           setClassifying(true);
           try {
             const result = await api.classifyJob(jobId!, 0.60);
             if (!cancelled) setClassifyResult(result);
           } catch (err) {
+            hasClassified.current = false; // izinkan retry kalau error
             if (!cancelled) {
-              setError(err instanceof Error ? err.message : "Klasifikasi gagal");
+              setError(err instanceof ApiClientError ? err.detail : "Klasifikasi gagal");
             }
           } finally {
             if (!cancelled) setClassifying(false);
@@ -75,21 +100,17 @@ export default function JobStatusPage({ params }: PageProps) {
       }
     }
 
-    // Cek pertama kali
+    // Poll pertama kali langsung
     poll();
 
-    // Setup interval polling 5 detik
-    const interval = setInterval(() => {
-      // Stop polling kalau sudah completed/failed
-      if (job?.status === "completed" || job?.status === "failed") return;
-      poll();
-    }, 5000);
+    // Polling tiap 5 detik — poll() sendiri yang skip kalau sudah selesai
+    const interval = setInterval(poll, 5000);
 
     return () => {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [jobId, job?.status, classifyResult, classifying]);
+  }, [jobId]); // HANYA jobId — tidak ada dependency lain
 
   // Auto-redirect ke hasil saat klasifikasi selesai
   useEffect(() => {

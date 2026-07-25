@@ -164,23 +164,25 @@ export default function ResultDetailPage({ params }: PageProps) {
             {result.timestamp}
           </div>
 
-          {/* Download buttons */}
+          {/* Download buttons — hanya tampil kalau file ada (path tidak kosong) */}
           <div className="flex flex-col gap-1">
             {[
-              { href: orthoUrl, label: "Orthophoto (.tif)" },
-              { href: classUrl, label: "Klasifikasi (.tif)" },
-              { href: vizUrl,   label: "Peta PNG"          },
-            ].map(({ href, label }) => (
-              <a
-                key={label}
-                href={href}
-                download
-                className="flex items-center gap-2 rounded-lg bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-700 shadow backdrop-blur-sm transition-colors hover:bg-white"
-              >
-                <Download className="h-3.5 w-3.5 shrink-0" />
-                {label}
-              </a>
-            ))}
+              { file: result.files.orthophoto,     href: orthoUrl, label: "Orthophoto (.tif)" },
+              { file: result.files.classification, href: classUrl, label: "Klasifikasi (.tif)" },
+              { file: result.files.visualization,  href: vizUrl,   label: "Peta PNG"           },
+            ]
+              .filter(({ file }) => !!file) // skip kalau path kosong (hasil manual)
+              .map(({ href, label }) => (
+                <a
+                  key={label}
+                  href={href}
+                  download
+                  className="flex items-center gap-2 rounded-lg bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-700 shadow backdrop-blur-sm transition-colors hover:bg-white"
+                >
+                  <Download className="h-3.5 w-3.5 shrink-0" />
+                  {label}
+                </a>
+              ))}
           </div>
         </div>
 
