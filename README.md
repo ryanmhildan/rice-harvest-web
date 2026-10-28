@@ -1,64 +1,73 @@
+<p align="center">
+  <img src="./docs/screenshots/banner.jpg" alt="Peta klasifikasi kematangan padi di atas OpenStreetMap" width="100%" />
+</p>
+
+<div align="center">
+
+[![Next.js](https://img.shields.io/badge/Next.js-15-000000?style=flat-square&logo=nextdotjs&logoColor=white)](package.json)
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](package.json)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white)](tsconfig.json)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind-3-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)](tailwind.config.ts)
+[![Leaflet](https://img.shields.io/badge/Leaflet-1.9-199900?style=flat-square&logo=leaflet&logoColor=white)](components/map-view.tsx)
+[![Skripsi](https://img.shields.io/badge/skripsi-UNIKOM%202026-1f6f43?style=flat-square)](#tentang)
+
 # Rice Harvest Web
 
-Antarmuka web untuk sistem deteksi kesiapan panen padi dari citra drone. Pengguna mengunggah foto drone, memantau proses stitching, lalu melihat hasil klasifikasi kematangan di atas peta interaktif.
+### Antarmuka web untuk membaca kesiapan panen padi dari foto drone.
 
-Repo ini hanya berisi frontend. Seluruh pemrosesan citra (stitching dan segmentasi HSV) dijalankan oleh backend di repo [rice_classification_api](https://github.com/ryanmhildan/rice_classification_api).
+**Peta dulu, angka kemudian.** Hasil klasifikasi langsung ditumpuk di atas peta lahan, lengkap dengan verdict dan file GeoTIFF yang bisa diunduh.
 
-![Peta hasil klasifikasi](docs/screenshots/hasil-peta.png)
+**[Backend](https://github.com/ryanmhildan/rice_classification_api) · [Kontrak API](https://github.com/ryanmhildan/rice_classification_api/blob/main/BACKEND_API.md)**
 
-Dibuat sebagai bagian dari skripsi *Deteksi dan Pemetaan Kesiapan Panen Padi Menggunakan Citra Drone Berbasis Edge Computing dan Sistem Informasi Geografis (SIG)*, Teknik Informatika UNIKOM 2026.
+[Tampilan](#tampilan) · [Menjalankan](#menjalankan) · [Halaman](#halaman) · [Struktur](#struktur) · [FAQ](#faq)
 
-## Arsitektur
+<code>npm install --legacy-peer-deps && npm run dev</code>
 
-Sistem berjalan sepenuhnya offline di satu laptop (Ground Control Station). Tiga proses berkomunikasi lewat HTTP di localhost:
+</div>
 
-```
-Next.js (3001)  --->  FastAPI (8000)  --->  NodeODM / Docker (3000)
-   repo ini            pemrosesan citra       stitching orthophoto
-```
-
-Frontend tidak pernah memanggil NodeODM secara langsung. Semua data diambil dari backend.
+---
 
 ## Tampilan
 
-### Beranda
+### Dari foto ke peta
 
-Ringkasan alur kerja sistem dan indikator status backend serta NodeODM.
+Pengguna mengunggah foto drone, backend menjahitnya menjadi orthophoto dan mengklasifikasikan setiap piksel padi. Halaman detail menampilkan hasilnya di atas OpenStreetMap dengan auto-zoom ke batas lahan.
 
-![Beranda](docs/screenshots/beranda.png)
+| **Upload** | **Detail hasil** |
+|:--|:--|
+| <a href="docs/screenshots/upload.png"><img src="docs/screenshots/upload.png" alt="Halaman upload dengan dua mode: foto drone untuk stitching dan klasifikasi, atau hasil manual berupa PNG" width="100%"></a> | <a href="docs/screenshots/hasil-peta.png"><img src="docs/screenshots/hasil-peta.png" alt="Halaman detail hasil: layer klasifikasi kuning dan hijau di atas peta, verdict SIAP PANEN 74,23 persen, panel statistik, dan tombol unduh GeoTIFF" width="100%"></a> |
+| Dua mode: foto drone mentah (stitching lalu klasifikasi) atau hasil yang sudah diproses di luar sistem. | Layer orthophoto dan klasifikasi bisa dinyalakan terpisah, opasitasnya diatur dengan slider. |
 
-### Upload
+### Riwayat
 
-Dua mode: unggah foto drone mentah (stitching lalu klasifikasi) atau unggah hasil PNG manual.
+| **Semua hasil** | **Per lahan** |
+|:--|:--|
+| <a href="docs/screenshots/hasil-list.png"><img src="docs/screenshots/hasil-list.png" alt="Daftar kartu hasil klasifikasi dengan verdict, persentase piksel kuning, dan threshold" width="100%"></a> | <a href="docs/screenshots/riwayat.png"><img src="docs/screenshots/riwayat.png" alt="Tabel riwayat deteksi dengan filter daftar lahan di sisi kiri" width="100%"></a> |
+| Setiap kartu membuka halaman detail dengan peta. | Diambil dari database SQLite di backend, dikelompokkan per sawah. |
 
-![Upload](docs/screenshots/upload.png)
+### Beranda dan status
 
-### Detail hasil
+| **Beranda** | **Status sistem** |
+|:--|:--|
+| <a href="docs/screenshots/beranda.png"><img src="docs/screenshots/beranda.png" alt="Beranda dengan penjelasan empat tahap pipeline dan indikator status backend serta NodeODM" width="100%"></a> | <a href="docs/screenshots/status.png"><img src="docs/screenshots/status.png" alt="Halaman status yang menampilkan backend FastAPI dan NodeODM sama-sama aktif" width="100%"></a> |
 
-Orthophoto dan layer klasifikasi ditampilkan di Leaflet dengan auto-zoom ke batas lahan. Opasitas layer klasifikasi bisa diatur, dan file GeoTIFF maupun PNG bisa diunduh dari panel kiri.
-
-![Detail hasil](docs/screenshots/hasil-peta.png)
-
-### Riwayat klasifikasi
-
-![Riwayat](docs/screenshots/hasil-list.png)
-
-### Riwayat per lahan
-
-Data diambil dari database SQLite di backend, dikelompokkan berdasarkan lahan.
-
-![Lahan](docs/screenshots/riwayat.png)
-
-### Status sistem
-
-![Status](docs/screenshots/status.png)
+Klik gambar mana pun untuk melihat ukuran penuh.
 
 ## Menjalankan
 
-Prasyarat:
+Sistem terdiri dari tiga proses lokal. Frontend ini adalah yang terakhir dinyalakan.
+
+```
+Next.js :3001  ->  FastAPI :8000  ->  NodeODM (Docker) :3000
+  repo ini          pemrosesan citra     stitching orthophoto
+```
+
+### Prasyarat
 
 - Node.js 20 atau lebih baru (diuji di 22.22)
-- Backend [rice_classification_api](https://github.com/ryanmhildan/rice_classification_api) sudah berjalan di port 8000
+- Backend [rice_classification_api](https://github.com/ryanmhildan/rice_classification_api) aktif di port 8000
+
+### Instalasi
 
 ```bash
 git clone https://github.com/ryanmhildan/rice-harvest-web.git
@@ -66,65 +75,82 @@ cd rice-harvest-web
 npm install --legacy-peer-deps
 ```
 
-Buat file `.env.local`:
+### Konfigurasi
+
+Buat file `.env.local` di root repo:
 
 ```
 NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
-Lalu jalankan:
+### Development
 
 ```bash
 npm run dev
 ```
 
-Buka http://localhost:3001. Untuk mode production gunakan `npm run build` lalu `npm start` (tetap di port 3001).
+Buka http://localhost:3001, lalu cek http://localhost:3001/status. Kedua kartu harus berstatus aktif.
 
-Urutan start yang benar adalah NodeODM, backend, baru frontend. Kalau frontend dinyalakan lebih dulu, halaman status akan menampilkan backend sebagai tidak aktif sampai backend hidup.
+### Production
+
+```bash
+npm run build
+npm start
+```
 
 ## Halaman
 
 | Path | Isi |
-|---|---|
-| `/` | Beranda dan status sistem |
+|------|-----|
+| `/` | Beranda dan status singkat |
 | `/upload` | Upload foto drone atau hasil manual |
-| `/jobs/[jobId]` | Progress stitching (polling tiap 5 detik) |
-| `/results` | Daftar semua hasil klasifikasi |
-| `/results/[timestamp]` | Peta dan statistik satu hasil |
+| `/jobs/[jobId]` | Progress stitching, polling tiap 5 detik |
+| `/results` | Semua hasil klasifikasi |
+| `/results/[timestamp]` | Peta, statistik, dan unduhan untuk satu hasil |
 | `/riwayat` | Riwayat deteksi per lahan |
 | `/status` | Monitoring backend dan NodeODM |
-
-## Stack
-
-- Next.js 15 (App Router), React 19, TypeScript
-- Tailwind CSS 3
-- Leaflet + react-leaflet, proj4 untuk konversi koordinat
-- lucide-react untuk ikon
-
-Komponen peta dimuat dengan `next/dynamic` dan `ssr: false` karena Leaflet membutuhkan objek `window`.
 
 ## Struktur
 
 ```
 app/            halaman (App Router)
-components/     komponen UI: peta, dropzone, panel statistik, dll
-lib/api.ts      client untuk endpoint backend
-lib/types.ts    tipe response, disamakan dengan BACKEND_API.md di repo backend
-lib/utils.ts    helper format angka dan tanggal
-docs/           screenshot untuk README
+components/     peta, dropzone, panel statistik, banner verdict
+lib/api.ts      pemanggilan endpoint backend
+lib/types.ts    tipe response, mengikuti BACKEND_API.md
+lib/utils.ts    format angka dan tanggal
+docs/           screenshot README
 ```
 
-Kalau ada perubahan endpoint di backend, `lib/types.ts` dan `lib/api.ts` perlu disesuaikan bersamaan dengan `BACKEND_API.md`.
+Kalau endpoint backend berubah, `lib/types.ts` dan `lib/api.ts` ikut disesuaikan dalam commit yang sama.
 
-## Troubleshooting
+## FAQ
 
-| Masalah | Penyebab | Solusi |
-|---|---|---|
-| CORS error di console | Origin belum diizinkan backend | Tambahkan origin di `allow_origins` pada `api.py` |
-| `window is not defined` | Komponen Leaflet dirender di server | Import dengan `dynamic(..., { ssr: false })` |
-| `npm install` gagal karena peer deps | Konflik versi React 19 | Gunakan `--legacy-peer-deps` |
-| Port 3001 terpakai | Proses lain | `npm run dev -- -p 3002`, lalu tambahkan origin baru di backend |
+**Apakah frontend ini memproses gambar?**
+Tidak. Semua stitching dan klasifikasi ada di backend. Frontend hanya mengunggah, memantau, dan menampilkan.
+
+**Butuh internet?**
+Tidak untuk pemrosesan. Koneksi hanya dipakai untuk memuat tile OpenStreetMap di latar peta. Tanpa internet, layer orthophoto dan klasifikasi tetap tampil.
+
+**Kenapa peta dimuat dengan `dynamic()`?**
+Leaflet butuh objek `window` saat di-import, sedangkan Next.js merender halaman di server lebih dulu. `dynamic(..., { ssr: false })` membuat komponen peta hanya dirender di browser.
+
+**Muncul CORS error di console.**
+Origin frontend belum diizinkan. Tambahkan origin tersebut di `allow_origins` pada `api.py` di repo backend.
+
+**Port 3001 sudah dipakai.**
+Jalankan `npm run dev -- -p 3002`, lalu tambahkan `http://localhost:3002` ke `allow_origins` di backend.
+
+<hr>
+
+<p align="center"><em>Sistem ini membaca warna kanopi, bukan kadar air gabah.<br>
+Hasilnya alat bantu keputusan, bukan pengganti petani yang turun ke sawah.</em></p>
+
+<hr>
+
+## Tentang
+
+Bagian dari skripsi *Deteksi dan Pemetaan Kesiapan Panen Padi Menggunakan Citra Drone Berbasis Edge Computing dan Sistem Informasi Geografis (SIG)*, Teknik Informatika UNIKOM 2026, oleh Ryan Muhammad Hildan.
 
 ## Lisensi
 
-Dibuat untuk keperluan skripsi. Silakan gunakan sebagai referensi akademis.
+Dibuat untuk keperluan skripsi. Silakan gunakan sebagai referensi akademis dengan mencantumkan sumber.
